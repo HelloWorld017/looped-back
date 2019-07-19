@@ -1,3 +1,4 @@
+#include <iostream>
 #include "LoopedBack.h"
 
 namespace LoopedBack {
@@ -22,27 +23,30 @@ LoopedBack::LoopedBack() {
 
 	hr = CoCreateInstance(
 		__uuidof(CPolicyConfigClient), NULL, CLSCTX_INPROC,
-		IID_IPolicyConfig2, (LPVOID *) &policyConfig
+		IID_IPolicyConfig2, (LPVOID *)&policyConfig
 	);
 
 	if(hr != S_OK)
 		hr = CoCreateInstance(
 			__uuidof(CPolicyConfigClient), NULL, CLSCTX_INPROC,
-			IID_IPolicyConfig1, (LPVOID *) &policyConfig
+			IID_IPolicyConfig1, (LPVOID *)&policyConfig
 		);
 
 	if(hr != S_OK)
 		hr = CoCreateInstance(
 			__uuidof(CPolicyConfigClient), NULL, CLSCTX_INPROC,
-			IID_IPolicyConfig0, (LPVOID *) &policyConfig
+			IID_IPolicyConfig0, (LPVOID *)&policyConfig
 		);
 
 	if(hr != S_OK)
 		throw InitException();
+
+	initialized = true;
 }
 
 LoopedBack::~LoopedBack() {
 	this->destroyInternal();
+	initialized = false;
 }
 
 void LoopedBack::Init(v8::Local<v8::Object> exports) {
@@ -54,6 +58,7 @@ void LoopedBack::Init(v8::Local<v8::Object> exports) {
 	Nan::SetPrototypeMethod(tpl, "getDevices", GetDevices);
 	Nan::SetPrototypeMethod(tpl, "getLoopback", GetLoopback);
 	Nan::SetPrototypeMethod(tpl, "setLoopback", SetLoopback);
+	Nan::SetPrototypeMethod(tpl, "isInitialized", IsInitialized);
 
 	constructor().Reset(Nan::GetFunction(tpl).ToLocalChecked());
 	Nan::Set(
@@ -90,6 +95,11 @@ void LoopedBack::destroyInternal() {
 void LoopedBack::Destroy(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	LoopedBack* that = Nan::ObjectWrap::Unwrap<LoopedBack>(args.Holder());
 	that->destroyInternal();
+}
+
+void LoopedBack::IsInitialized(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LoopedBack* that = ObjectWrap::Unwrap<LoopedBack>(args.Holder());
+	args.GetReturnValue().Set(Nan::New<v8::Boolean>(that->initialized));
 }
 
 void LoopedBack::GetDevices(const Nan::FunctionCallbackInfo<v8::Value>& args) {
@@ -167,13 +177,9 @@ void LoopedBack::RunWithPropertyStore(
 	const Nan::FunctionCallbackInfo<v8::Value>& args,
 	std::function<void(IPropertyStore*)> callback
 ) {
-	
-}
-
-void LoopedBack::GetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	LoopedBack* that = ObjectWrap::Unwrap<LoopedBack>(args.Holder());
 
-	if(!that->policyConfig || !that->deviceEnumerator) {
+	if(!that->deviceEnumerator) {
 		return Nan::ThrowError("Failed to initialize audio instance!");
 	}
 
@@ -201,17 +207,7 @@ void LoopedBack::GetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	IPropertyStore* propertyStore;
 	device->OpenPropertyStore(STGM_READ, &propertyStore);
 
-	PROPVARIANT monitorOutput;
-	PropVariantInit(&monitorOutput);
-	hr = propertyStore->GetValue(PKEY_MonitorOutput, &monitorOutput);
-
-	if(hr == S_OK && monitorOutput.pwszVal) {
-		args.GetReturnValue().Set(Nan::New((uint16_t*) monitorOutput.pwszVal).ToLocalChecked());
-	} else {
-		args.GetReturnValue().Set(Nan::Null());
-	}
-
-	PropVariantClear(&monitorOutput);
+	callback(propertyStore);
 
 	device->Release();
 	device = nullptr;
@@ -220,8 +216,78 @@ void LoopedBack::GetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	propertyStore = nullptr;
 }
 
-void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+void LoopedBack::GetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LoopedBack::RunWithPropertyStore(args, [&args](IPropertyStore* propertyStore) {
+		HRESULT hr;
 
+		PROPVARIANT monitorOutput;
+		PropVariantInit(&monitorOutput);
+		hr = propertyStore->GetValue(PKEY_MonitorOutput, &monitorOutput);
+
+		if(hr == S_OK && monitorOutput.pwszVal) {
+			args.GetReturnValue().Set(Nan::New((uint16_t*) monitorOutput.pwszVal).ToLocalChecked());
+		} else {
+			args.GetReturnValue().Set(Nan::Null());
+		}
+
+		PropVariantClear(&monitorOutput);
+	});
+}
+
+void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LoopedBack* that = ObjectWrap::Unwrap<LoopedBack>(args.Holder());
+
+	if(!that->policyConfig) {
+		return Nan::ThrowError("Failed to initialize audio instance!");
+	}
+
+	VARIANT_BOOL loopbackEnabled = VARIANT_TRUE;
+
+	if(args.Length() == 0 || !args[0]->IsString()) {
+		return Nan::ThrowTypeError("Device id should be string!");
+	}
+
+	if(args.Length() <= 1 || !args[1]->IsString()) {
+		loopbackEnabled = VARIANT_FALSE;
+	}
+
+	LPCWSTR deviceId = (LPCWSTR) *v8::String::Value(
+		args.GetIsolate(),
+		args[0]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
+	);
+
+	LPWSTR targetId = (LPWSTR) *v8::String::Value(
+		args.GetIsolate(),
+		args[1]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
+	);
+
+	HRESULT hr;
+
+	PROPVARIANT setVal;
+	PropVariantInit(&setVal);
+	InitPropVariantFromBoolean(loopbackEnabled, &setVal);
+
+	hr = that->policyConfig->SetPropertyValue(deviceId, 0, PKEY_MonitorEnabled, &setVal);
+	PropVariantClear(&setVal);
+
+	if(hr != S_OK) {
+		args.GetReturnValue().Set(Nan::False());
+		return;
+	}
+
+	InitPropVariantFromString(targetId, &setVal);
+	hr = that->policyConfig->SetPropertyValue(deviceId, 0, PKEY_MonitorOutput, &setVal);
+	PropVariantClear(&setVal);
+
+	if(hr != S_OK) {
+		args.GetReturnValue().Set(Nan::False());
+		return;
+	}
+
+	args.GetReturnValue().Set(Nan::True());
+
+	CoTaskMemFree(targetId);
+	targetId = nullptr;
 }
 
 NODE_MODULE(LoopedBack, LoopedBack::Init)
