@@ -1,59 +1,61 @@
-# Node Native Extension Boilerplate
-
-[![Build Status](https://travis-ci.org/fcanas/node-native-boilerplate.svg)](https://travis-ci.org/fcanas/node-native-boilerplate)
-
-A very approachable node native extension.
-
-This repository serves as a nearly minimal native extension built on [Nan](https://github.com/nodejs/nan) with enough tooling to also make it a great starting point for more complex projects.
+# LoopedBack
+A node module to change loopback device (a.k.a "Listen to this device") in Windows.  
+Codes imported from [mrbindraw/DemoStereoMix](https://github.com/mrbindraw/DemoStereoMix)
 
 ## Building
-
-To compile the extension for the first time, run 
+To compile the extension for the first time, run
 
 ```
 $ npm i
-$ npm run configure
-$ npm run build
 ```
 
 All subsequent builds only need `npm run build`
 
-You can confirm everything built correctly by [running the test suite](#to-run-tests).
-
-### Working With the Extension Locally
-
-After building:
+## Usage
 
 ```node
 $ node
-> var NativeExtension = require('./')
+> const LoopedBack = require('.');
 undefined
-> NativeExtension.aString()
-'This is a thing.'
-> NativeExtension.aBoolean()
-false
-> NativeExtension.nothing()
+
+> const looped = new LoopedBack();
 undefined
-> 
+
+> looped.isInitialized();
+true
+
+> looped.getDevices(LoopedBack.DEVICE_ALL);
+[
+	{
+		id: '{0.0.0.00000000}.{01234567-89ab-cdef-0123-456789abcdef}',
+		name: 'Speaker(High Definition Audio Device)'
+	},
+
+	{
+		id: '{0.0.0.00000000}.{12345678-90ab-cdef-1234-567890abcdef}',
+		name: 'Microphone(High Definition Audio Device)'
+	},
+	...
+]
+
+> const microphone = looped.getDevices(LoopedBack.DEVICE_CAPTURE)[0];
+undefined
+
+> const speaker = looped.getDevices(LoopedBack.DEVICE_RENDER)[0];
+undefined
+
+> looped.getLoopback(microphone.id); //returns null if loopback is disabled
+null
+
+> looped.setLoopback(microphone.id, speaker.id); //returns false if failed
+true
+
+> looped.getLoopback(microphone.id);
+'{0.0.0.00000000}.{01234567-89ab-cdef-0123-456789abcdef}'
+
+> looped.setLoopback(microphone.id); //disables loopback
+true
+
+> looped.destroy();
+undefined
 ```
-
-### To run tests:
-
-```
-$ npm test
-```
-
-or to run test continuously 
-
-```
-$ npm test -- watch
-```
-
-## The Parts
-
-File | Contents
--------------|----------------
-`NativeExtension.cc` | Represents the top level of the module. C++ constructs that are exposed to javascript are exported here
-`functions.cc` | Example top-level functions. These functions demonstrate how to build and return various js types.
-`index.js` | The main entry point for the node dependency
-`binding.gyp` | Describes your node native extention to the build system (`node-gyp`). As you add source files to the project, you should also add them to the binding file.

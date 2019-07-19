@@ -285,9 +285,6 @@ void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	}
 
 	args.GetReturnValue().Set(Nan::True());
-
-	CoTaskMemFree(targetId);
-	targetId = nullptr;
 }
 
 NODE_MODULE(LoopedBack, LoopedBack::Init)
