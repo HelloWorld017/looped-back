@@ -47,6 +47,8 @@ class LoopedBack : public Nan::ObjectWrap {
 		static void GetDevices(const Nan::FunctionCallbackInfo<v8::Value>& args);
 		static void GetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args);
 		static void SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args);
+		static void GetDefaultEndpoint(const Nan::FunctionCallbackInfo<v8::Value>& args);
+		static void SetDefaultEndpoint(const Nan::FunctionCallbackInfo<v8::Value>& args);
 		static void IsInitialized(const Nan::FunctionCallbackInfo<v8::Value>& args);
 
 		static inline Nan::Persistent<v8::Function> & constructor() {

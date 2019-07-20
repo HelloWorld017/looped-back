@@ -58,6 +58,8 @@ void LoopedBack::Init(v8::Local<v8::Object> exports) {
 	Nan::SetPrototypeMethod(tpl, "getDevices", GetDevices);
 	Nan::SetPrototypeMethod(tpl, "getLoopback", GetLoopback);
 	Nan::SetPrototypeMethod(tpl, "setLoopback", SetLoopback);
+	Nan::SetPrototypeMethod(tpl, "getDefaultEndpoint", GetDefaultEndpoint);
+	Nan::SetPrototypeMethod(tpl, "setDefaultEndpoint", SetDefaultEndpoint);
 	Nan::SetPrototypeMethod(tpl, "isInitialized", IsInitialized);
 
 	constructor().Reset(Nan::GetFunction(tpl).ToLocalChecked());
@@ -279,6 +281,94 @@ void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 	hr = that->policyConfig->SetPropertyValue(deviceId, 0, PKEY_MonitorOutput, &setVal);
 	PropVariantClear(&setVal);
 
+	if(hr != S_OK) {
+		args.GetReturnValue().Set(Nan::False());
+		return;
+	}
+
+	args.GetReturnValue().Set(Nan::True());
+}
+
+void LoopedBack::GetDefaultEndpoint(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LoopedBack* that = ObjectWrap::Unwrap<LoopedBack>(args.Holder());
+
+	if(!that->deviceEnumerator) {
+		return Nan::ThrowError("Failed to initialize audio instance!");
+	}
+
+	int type = args[0]->Uint32Value(Nan::GetCurrentContext()).FromJust();
+	EDataFlow dataFlowType;
+	if(type == 0) {
+		dataFlowType = eRender;
+	} else {
+		dataFlowType = eCapture;
+	}
+
+	HRESULT hr;
+	v8::Local<v8::Object> retval = Nan::New<v8::Object>();
+
+	int i = 0;
+	for(ERole role : {eConsole, eMultimedia, eCommunications}) {
+		IMMDevice* device;
+		hr = that->deviceEnumerator->GetDefaultAudioEndpoint(dataFlowType, role, &device);
+
+		if(hr == S_OK) {
+			LPWSTR deviceId = nullptr;
+			device->GetId(&deviceId);
+
+			Nan::Set(
+				retval,
+				i,
+				Nan::New((uint16_t*) deviceId).ToLocalChecked()
+			);
+
+			CoTaskMemFree(deviceId);
+			deviceId = nullptr;
+
+			device->Release();
+			device = nullptr;
+		} else {
+			Nan::Set(
+				retval,
+				i,
+				Nan::Null()
+			);
+		}
+
+		i++;
+	}
+
+	args.GetReturnValue().Set(retval);
+}
+
+void LoopedBack::SetDefaultEndpoint(const Nan::FunctionCallbackInfo<v8::Value>& args) {
+	LoopedBack* that = ObjectWrap::Unwrap<LoopedBack>(args.Holder());
+
+	if(!that->policyConfig) {
+		return Nan::ThrowError("Failed to initialize audio instance!");
+	}
+
+	if(args.Length() < 2 || !args[0]->IsString()) {
+		return Nan::ThrowTypeError("Wrong argument supplied!");
+	}
+
+	LPCWSTR deviceId = (LPCWSTR) *v8::String::Value(
+		args.GetIsolate(),
+		args[0]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
+	);
+
+	int roleInt = args[1]->Uint32Value(Nan::GetCurrentContext()).FromJust();
+
+	ERole role;
+	if(roleInt == 0) {
+		role = eConsole;
+	} else if (roleInt == 1) {
+		role = eMultimedia;
+	} else {
+		role = eCommunications;
+	}
+
+	HRESULT hr = that->policyConfig->SetDefaultEndpoint(deviceId, role);
 	if(hr != S_OK) {
 		args.GetReturnValue().Set(Nan::False());
 		return;

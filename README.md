@@ -56,6 +56,12 @@ true
 > looped.setLoopback(microphone.id); //disables loopback
 true
 
+> looped.setDefaultEndpoint(microphone.id, LoopedBack.ROLE_COMMUNICATION)
+true
+
+> looped.getDefaultEndpoint(LoopedBack.DEVICE_CAPTURE)[LoopedBack.ROLE_COMMUNICATION];
+'{0.0.0.00000000}.{12345678-90ab-cdef-1234-567890abcdef}'
+
 > looped.destroy();
 undefined
 ```
