@@ -15,7 +15,7 @@ All subsequent builds only need `npm run build`
 
 ```node
 $ node
-> const LoopedBack = require('.');
+> const LoopedBack = require('looped-back');
 undefined
 
 > const looped = new LoopedBack();

@@ -258,11 +258,6 @@ void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 		args[0]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
 	);
 
-	LPWSTR targetId = (LPWSTR) *v8::String::Value(
-		args.GetIsolate(),
-		args[1]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
-	);
-
 	HRESULT hr;
 
 	PROPVARIANT setVal;
@@ -276,6 +271,16 @@ void LoopedBack::SetLoopback(const Nan::FunctionCallbackInfo<v8::Value>& args) {
 		args.GetReturnValue().Set(Nan::False());
 		return;
 	}
+
+	if(loopbackEnabled == VARIANT_FALSE) {
+		args.GetReturnValue().Set(Nan::True());
+		return;
+	}
+
+	LPWSTR targetId = (LPWSTR) *v8::String::Value(
+		args.GetIsolate(),
+		args[1]->ToString(Nan::GetCurrentContext()).ToLocalChecked()
+	);
 
 	InitPropVariantFromString(targetId, &setVal);
 	hr = that->policyConfig->SetPropertyValue(deviceId, 0, PKEY_MonitorOutput, &setVal);
